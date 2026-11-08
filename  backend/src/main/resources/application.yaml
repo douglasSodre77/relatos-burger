@@ -1,3 +1,13 @@
 spring:
   application:
-    name: api
+    name: relatos-burger-api
+  profiles:
+    active: dev
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+server:
+  port: 8080
