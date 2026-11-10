@@ -3,6 +3,10 @@ spring:
     name: relatos-burger-api
   profiles:
     active: dev
+  datasource:
+    url: jdbc:mysql://localhost:3306/relatos_burger?serverTimezone=America/Sao_Paulo&allowPublicKeyRetrieval=true&useSSL=false
+    username: ${DB_USER:relatos}
+    password: ${DB_PASSWORD}
   jpa:
     hibernate:
       ddl-auto: validate
@@ -11,3 +15,5 @@ spring:
     enabled: true
 server:
   port: 8081
+  error:
+    include-stacktrace: never

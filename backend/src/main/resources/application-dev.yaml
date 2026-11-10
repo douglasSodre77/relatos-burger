@@ -1,11 +1,3 @@
-spring:
-  datasource:
-    url: jdbc:mysql://localhost:3306/relatos_burger?serverTimezone=America/Sao_Paulo&allowPublicKeyRetrieval=true&useSSL=false
-    username: ${DB_USER:relatos}
-    password: ${DB_PASSWORD}
 app:
-  jwt:
-    secret: ${JWT_SECRET:troque-esta-chave-dev-com-no-minimo-32-caracteres}
-    expiracao-minutos: 120
   cors:
-    origens-permitidas: http://localhost:3000
+    origens-permitidas: ${CORS_ORIGENS:http://localhost:3000}
