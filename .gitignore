@@ -5,3 +5,5 @@
 *.log
 *.p12
 *.jks
+*.pem
+cliente/target/
