@@ -1,10 +1,48 @@
-# Relatos Burger — API
+# Relatos Burger — API e Cliente
 
-API REST de consulta do site da hamburgueria **Relatos Burger**.
+## Contexto do projeto
 
-O backend expõe, em modo **somente leitura**, os dados do cardápio (categorias e produtos) e as informações institucionais. A pilha é **Java 21 + Spring Boot 4.1.2**, com **MySQL 8**, migrações **Flyway**, **Spring Data JPA/Hibernate** e **Spring Security 7**.
+O **Relatos Burger** é uma hamburgueria que precisa divulgar seu cardápio e suas informações institucionais em uma aplicação cliente-servidor simples.
 
-> **Estado atual (`main`):** API de consulta implementada, com perfis `dev` (HTTP) e `tls` (HTTPS), tratamento padronizado de erros, log de requisições e testes automatizados.
+- **Servidor:** API Spring Boot (`backend/`) que consulta o MySQL e devolve os dados em JSON.
+- **Cliente:** cliente Java de linha de comando (`cliente/`), empacotado como JAR executável.
+- **Segurança:** a comunicação entre cliente e servidor é protegida por **TLS/HTTPS**.
+
+```
+Cliente (cliente/target/cliente.jar) --HTTPS/TLS--> Servidor (Spring Boot) --> MySQL
+```
+
+## Início rápido
+
+1. **Suba o MySQL** (se o container ainda não existir, veja [Banco de dados](#banco-de-dados-docker)):
+   ```bash
+   docker start relatos-mysql
+   ```
+2. **Gere o certificado** autoassinado, a partir da raiz do repositório:
+   ```bash
+   keytool -genkeypair -alias relatos-burger -keyalg RSA -keysize 2048 -storetype PKCS12 -keystore backend/relatos-burger.p12 -validity 365 -storepass changeit -dname "CN=localhost, OU=PI, O=Relatos Burger, L=Goiania, ST=GO, C=BR" -ext "SAN=dns:localhost,ip:127.0.0.1"
+   ```
+3. **Exporte o certificado público** para PEM:
+   ```bash
+   keytool -exportcert -alias relatos-burger -keystore backend/relatos-burger.p12 -storepass changeit -rfc -file backend/relatos-burger.pem
+   ```
+4. **Suba a API com o profile `tls`** (detalhes em [HTTPS/TLS](#httpstls-profile-tls)):
+   ```powershell
+   cd backend
+   $env:DB_PASSWORD="relatos"; $env:SSL_KEYSTORE_PATH="$PWD\relatos-burger.p12"; $env:SSL_KEYSTORE_PASSWORD="changeit"
+   .\mvnw.cmd "-Dspring-boot.run.profiles=tls" spring-boot:run
+   ```
+5. **Compile e rode o cliente** em outro terminal, a partir da raiz:
+   ```powershell
+   cd cliente
+   .\mvnw.cmd clean package
+   java -jar target/cliente.jar --cafile ../backend/relatos-burger.pem
+   ```
+6. **Rode os testes** do backend (com o MySQL no ar), em outro terminal, a partir da raiz:
+   ```powershell
+   cd backend
+   .\mvnw.cmd test
+   ```
 
 ---
 
@@ -19,58 +57,35 @@ O backend expõe, em modo **somente leitura**, os dados do cardápio (categorias
 | Migrações     | Flyway (`flyway-mysql`)                      |
 | Persistência  | Spring Data JPA / Hibernate                  |
 | Segurança     | Spring Security 7                            |
+| Cliente       | Java 21, `java.net.http.HttpClient` e Jackson |
 | Produtividade | Lombok, Spring Boot DevTools                 |
 
 ## Estrutura do repositório
 
 ```
 relatos-burger/
-└── backend/
-    ├── mvnw / mvnw.cmd            # Maven Wrapper (não precisa instalar Maven)
-    ├── pom.xml
-    └── src/
-        ├── main/
-        │   ├── java/com/relatosburger/api/
-        │   │   ├── RelatosBurgerApplication.java
-        │   │   ├── status/StatusController.java
-        │   │   ├── cardapio/
-        │   │   │   ├── domain/            # Categoria, Produto
-        │   │   │   ├── dto/               # CategoriaResponse, ProdutoResponse
-        │   │   │   ├── repository/        # CategoriaRepository, ProdutoRepository
-        │   │   │   └── web/               # CardapioController
-        │   │   ├── institucional/
-        │   │   │   ├── domain/            # InformacaoInstitucional
-        │   │   │   ├── dto/               # InstitucionalResponse
-        │   │   │   ├── repository/        # InformacaoInstitucionalRepository
-        │   │   │   └── web/               # InstitucionalController
-        │   │   └── shared/
-        │   │       ├── exception/         # ErroResponse, GlobalExceptionHandler
-        │   │       ├── log/               # RequestLoggingFilter
-        │   │       └── security/          # SecurityConfig, SecurityConfigTls, CorsConfig
-        │   └── resources/
-        │       ├── application.yaml       # configuração base (porta 8081, profile dev)
-        │       ├── application-dev.yaml   # CORS HTTP
-        │       ├── application-tls.yaml   # HTTPS, CORS HTTPS
-        │       └── db/migration/          # V1 (schema) e V2 (seed fictício)
-        └── test/java/com/relatosburger/api/
-            ├── cardapio/CardapioControllerTest.java
-            ├── institucional/ApiConsultaTest.java
-            ├── shared/security/TlsSecurityTest.java
-            └── RelatosBurgerApplicationTests.java
+├── backend/                  # API Spring Boot (Java 21)
+│   ├── src/main/java/...     # cardapio, institucional, status e shared
+│   ├── src/main/resources/   # application*.yaml e db/migration
+│   └── src/test/             # testes automatizados
+├── cliente/                  # cliente Java de linha de comando
+│   ├── src/main/java/com/relatosburger/cliente/
+│   ├── pom.xml
+│   └── README.md
+├── .gitignore
+└── README.md
 ```
-
-> O `frontend/` (Flutter Web) e o `docs/` ainda não estão versionados neste repositório.
 
 ---
 
 ## Pré-requisitos
 
 - **JDK 21** instalado (`java -version` deve reportar 21).
-- **`JAVA_HOME`** apontando para o diretório do **JDK** (não apenas o JRE). O Maven Wrapper depende dessa variável.
+- **`JAVA_HOME`** apontando para o diretório do **JDK** (não apenas o JRE). Os Maven Wrappers dependem dessa variável.
 - **Docker** (recomendado, para o MySQL) **ou** um **MySQL 8** local.
-- Não é necessário instalar Maven: use o wrapper incluído (`mvnw` / `mvnw.cmd`).
+- Não é necessário instalar Maven: use o wrapper incluído em `backend/` e em `cliente/`.
 
-Verificações rápidas:
+Verificações rápidas no PowerShell:
 
 ```powershell
 java -version
@@ -78,9 +93,11 @@ $env:JAVA_HOME
 docker --version
 ```
 
+Verificações rápidas no Bash:
+
 ```bash
 java -version
-echo $JAVA_HOME
+echo "$JAVA_HOME"
 docker --version
 ```
 
@@ -88,17 +105,15 @@ docker --version
 
 ## Variáveis de ambiente
 
-| Variável                | Perfil | Obrigatória | Padrão                    | Descrição                                      |
-| ----------------------- | ------ | ----------- | ------------------------- | ---------------------------------------------- |
-| `DB_USER`               | todos  | Não         | `relatos`                 | Usuário do MySQL                               |
-| `DB_PASSWORD`           | todos  | **Sim**     | —                         | Senha do usuário do MySQL                      |
-| `CORS_ORIGENS`          | dev    | Não         | `http://localhost:3000`   | Origens permitidas (separadas por vírgula)     |
-| `CORS_ORIGENS`          | tls    | Não         | `https://localhost:3000`  | Origens permitidas (separadas por vírgula)     |
-| `SSL_KEYSTORE_PATH`     | tls    | **Sim**     | —                         | Caminho do keystore PKCS12 (ex.: `relatos-burger.p12`) |
-| `SSL_KEYSTORE_PASSWORD` | tls    | **Sim**     | —                         | Senha do keystore                              |
-| `SERVER_PORT`           | todos  | Não         | `8081` (dev) / `8443` (tls) | Porta da API (pode ser sobrescrita)         |
+| Variável                | Perfil | Obrigatória | Padrão                      | Descrição                                               |
+| ----------------------- | ------ | ----------- | --------------------------- | ------------------------------------------------------- |
+| `DB_USER`               | todos  | Não         | `relatos`                   | Usuário do MySQL                                        |
+| `DB_PASSWORD`           | todos  | **Sim**     | —                           | Senha do usuário do MySQL                               |
+| `SSL_KEYSTORE_PATH`     | tls    | **Sim**     | —                           | Caminho do keystore PKCS12 (ex.: `relatos-burger.p12`)  |
+| `SSL_KEYSTORE_PASSWORD` | tls    | **Sim**     | —                           | Senha do keystore                                       |
+| `SERVER_PORT`           | todos  | Não         | `8081` (dev) / `8443` (tls) | Porta da API (pode ser sobrescrita)                     |
 
-> O segredo do keystore **não** deve ser versionado. O `.gitignore` já ignora `*.p12` e `*.jks`.
+> O segredo do keystore **não** deve ser versionado. O `.gitignore` já ignora `*.p12`, `*.jks`, `*.pem` e `cliente/target/`.
 
 ---
 
@@ -147,6 +162,8 @@ Conexão usada pela aplicação:
 ```
 jdbc:mysql://localhost:3306/relatos_burger?serverTimezone=America/Sao_Paulo&allowPublicKeyRetrieval=true&useSSL=false
 ```
+
+> A conexão API → MySQL usa `useSSL=false` porque o banco roda localmente. Em produção, habilite TLS também nessa conexão.
 
 ### MySQL local (alternativa ao Docker)
 
@@ -285,15 +302,7 @@ curl http://localhost:8081/api/cardapio/produtos/1
 curl http://localhost:8081/api/institucional
 ```
 
-> No profile `dev` a segurança está liberada (`SecurityConfig` com `permitAll`) e o CORS aceita `http://localhost:3000`. A raiz `/` retorna **404** porque não há endpoint mapeado nela — use `/api/status`.
-
-### Via IntelliJ IDEA
-
-1. Abra a pasta raiz do repositório (`relatos-burger/`).
-2. Em **Project Structure → Project SDK**, selecione o **JDK 21**.
-3. Reimporte o Maven (ícone do Maven → *Reload All Maven Projects*).
-4. Garanta `DB_PASSWORD` nas variáveis de execução (*Run/Debug Configurations → Environment variables*).
-5. Execute `RelatosBurgerApplication`.
+> No profile `dev` a segurança está liberada (`SecurityConfig` com `permitAll`). A raiz `/` retorna **404** porque não há endpoint mapeado nela — use `/api/status`.
 
 ---
 
@@ -319,7 +328,7 @@ No PowerShell (linha única):
 keytool -genkeypair -alias relatos-burger -keyalg RSA -keysize 2048 -storetype PKCS12 -keystore relatos-burger.p12 -validity 365 -storepass changeit -dname "CN=localhost, OU=PI, O=Relatos Burger, L=Goiania, ST=GO, C=BR" -ext "SAN=dns:localhost,ip:127.0.0.1"
 ```
 
-> O arquivo `relatos-burger.p12` é ignorado pelo Git. Nunca versione a chave privada.
+> O arquivo `relatos-burger.p12` é ignorado pelo Git. Nunca versione a chave privada. Para o cliente, exporte o certificado público em `.pem` (veja [cliente/README.md](cliente/README.md)).
 
 ### 2. Subir com o profile `tls`
 
@@ -351,7 +360,7 @@ Tomcat started on port 8443 (https)
 
 ### 3. Testar HTTPS
 
-Como o certificado é autoassinado, use `-k` (curl) ou aceite o certificado no navegador:
+Como o certificado é autoassinado, use `-k` no curl para os testes rápidos. No cliente, prefira `--cafile` para validar o certificado.
 
 ```bash
 curl -k https://localhost:8443/api/status
@@ -368,17 +377,44 @@ openssl s_client -connect localhost:8443 -servername localhost
 
 ### Regras de segurança do profile `tls`
 
-- Apenas `GET /api/**` é permitido; qualquer outra rota/método retorna **403**.
-- Requisições não seguras são redirecionadas para HTTPS (`redirectToHttps`).
+- O profile garante **tráfego cifrado em trânsito** entre cliente e API por meio de **TLS/HTTPS** na porta 8443.
+- Apenas `GET /api/**` é permitido; métodos de escrita (`POST`, `PUT`, `PATCH`, `DELETE`) e outras rotas retornam **403**.
 - CSRF está desabilitado porque a API é stateless e somente leitura.
-- CORS liberado para `https://localhost:3000` por padrão (`CORS_ORIGENS`).
-- No Spring Security 7, o antigo `requiresChannel().anyRequest().requiresSecure()` foi removido e substituído por `redirectToHttps()`, usado neste projeto como equivalente.
+- No Spring Security 7, o antigo `requiresChannel()` foi substituído por `redirectToHttps()`.
 
 > O certificado autoassinado serve para desenvolvimento e demonstração. Em produção, use um certificado válido (CA) ou um proxy reverso (Nginx, por exemplo) terminando o TLS.
 
 ---
 
+## Cliente em linha de comando
+
+O cliente Java fica em `cliente/` e é um projeto Maven independente do backend. Instruções completas em [cliente/README.md](cliente/README.md).
+
+```bash
+cd cliente
+./mvnw clean package
+java -jar target/cliente.jar --cafile ../backend/relatos-burger.pem
+```
+
+No PowerShell:
+
+```powershell
+cd cliente
+.\mvnw.cmd clean package
+java -jar target/cliente.jar --cafile ../backend/relatos-burger.pem
+```
+
+Para testar sem validar o certificado (apenas em ambiente local):
+
+```bash
+java -jar target/cliente.jar --inseguro
+```
+
+---
+
 ## Build e testes
+
+A partir de `backend/`:
 
 ```powershell
 # Windows
@@ -404,7 +440,7 @@ java -jar target/api-0.0.1-SNAPSHOT.jar
 | ------------------------------ | ---------------------------------------------------------------- |
 | `CardapioControllerTest`       | Listagem, filtro por categoria, detalhe e 404                    |
 | `ApiConsultaTest`              | `/api/status` e `/api/institucional`                             |
-| `TlsSecurityTest`              | Profile `tls`: GET autenticado por HTTPS e POST/DELETE com 403   |
+| `TlsSecurityTest`              | Profile `tls`: GET por HTTPS e POST/DELETE com 403               |
 | `RelatosBurgerApplicationTests`| Carregamento do contexto Spring                                  |
 
 > Os testes usam `@SpringBootTest` e carregam o contexto completo, portanto **o MySQL precisa estar acessível** para `./mvnw test` funcionar. O `TlsSecurityTest` simula HTTPS no MockMvc e desabilita o listener SSL real apenas no teste.
@@ -415,8 +451,8 @@ java -jar target/api-0.0.1-SNAPSHOT.jar
 
 - O profile ativo é definido em `application.yaml` (`spring.profiles.active: dev`).
 - `application.yaml` (base): datasource, JPA, Flyway, porta `8081` e `server.error.include-stacktrace: never`.
-- `application-dev.yaml`: CORS HTTP (`http://localhost:3000`).
-- `application-tls.yaml`: porta `8443`, SSL PKCS12 (`key-alias: relatos-burger`) e CORS HTTPS.
+- `application-dev.yaml`: configurações específicas do profile `dev`.
+- `application-tls.yaml`: porta `8443` e SSL PKCS12 (`key-alias: relatos-burger`).
 - `spring.jpa.hibernate.ddl-auto: validate`: o Hibernate **não cria tabelas**; o schema é responsabilidade do Flyway.
 - Migrações ficam em `src/main/resources/db/migration`.
 - O `RequestLoggingFilter` registra método, URI, status, `secure` e duração de cada requisição.
@@ -431,17 +467,6 @@ java -jar target/api-0.0.1-SNAPSHOT.jar
 | `The JAVA_HOME environment variable is not defined correctly` | `JAVA_HOME` ausente ou apontando para caminho inválido/JRE | Aponte para o JDK 21 e reabra o terminal |
 | `Communications link failure` / `Connection refused` | MySQL não está rodando na porta 3306 | `docker start relatos-mysql` ou inicie o MySQL local |
 | `Access denied for user 'relatos'` | `DB_PASSWORD` ausente/incorreta | Defina `DB_PASSWORD` corretamente |
-| `Port 8081 was already in use` | Porta ocupada | Use `SERVER_PORT`/`--server.port` com outra porta |
-| `Port 8443 was already in use` | Porta ocupada no profile `tls` | Encerre o processo anterior ou use outra porta |
 | `Could not load keystore` / `keystore password was incorrect` | `SSL_KEYSTORE_PATH`/`SSL_KEYSTORE_PASSWORD` ausentes ou incorretos | Confira as variáveis e o caminho do `.p12` |
-| `PKIX path building failed` ao usar `curl`/navegador | Certificado autoassinado não confiável | Use `curl -k` em desenvolvimento ou confie no certificado |
+| `Port 8081/8443 was already in use` | Porta ocupada | Encerre o processo anterior ou use outra porta |
 | `HTTP 403` em `POST`/`DELETE` no profile `tls` | Comportamento esperado: a API é somente leitura | Use apenas `GET` |
-| `HTTP 404` em `/` | Não há endpoint mapeado na raiz | Use `GET /api/status` para validar a API |
-| `No migrations found` (WARN) | Migrações ausentes no classpath | Verifique `src/main/resources/db/migration` |
-
----
-
-## Branches
-
-- `main`: API de consulta (cardápio + institucional), perfis `dev` e `tls`, testes e documentação.
-- Trabalhos futuros (usuários, pedidos, autenticação) devem ser feitos em branches próprias a partir da `main`.
